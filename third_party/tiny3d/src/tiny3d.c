@@ -369,6 +369,9 @@ static void try_draw_triangle(){
 				for (int k = 0; k < 3; k++){
 					cv[j].position[k] /= cv[j].position[3];
 				}
+				cv[j].position[3] = 1.0f / cv[j].position[3];
+				cv[j].uv[0] *= cv[j].position[3];
+				cv[j].uv[1] *= cv[j].position[3];
 				scrpos[j][0] = (int)roundf((1.0f + cv[j].position[0]) * 0.5f * ((float)framebuffer->width-1));
 				scrpos[j][1] = (int)roundf((1.0f + cv[j].position[1]) * 0.5f * ((float)framebuffer->height-1));
 			}
@@ -402,11 +405,12 @@ static void try_draw_triangle(){
 								cv[j].position[2] * bary[1] +
 								cv[j+1].position[2] * bary[2];
 							if (depth < framebuffer->depth[p[1]*framebuffer->width+p[0]]){
+								float wt = 1.0f / (bary[0] * cv[0].position[3] + bary[1] * cv[j].position[3] + bary[2] * cv[j+1].position[3]);
 								vec2 uv;
 								for (int k = 0; k < 2; k++){
-									uv[k] = cv[0].uv[k] * bary[0] +
+									uv[k] = (cv[0].uv[k] * bary[0] +
 											cv[j].uv[k] * bary[1] +
-											cv[j+1].uv[k] * bary[2];
+											cv[j+1].uv[k] * bary[2]) * wt;
 								}
 								uv[0] *= texture->width;
 								uv[1] *= texture->height;
