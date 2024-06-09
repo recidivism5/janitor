@@ -15,6 +15,22 @@
 #include <whereami.h>
 #include <tinymath.h>
 
+#if __APPLE__
+	#include <OpenGL/OpenGL.h>
+	#include <OpenGL/gl.h>
+	#include <OpenGL/glu.h>
+#else
+	#if _WIN32
+		#define WIN32_LEAN_AND_MEAN
+		#define NOMINMAX
+		#define UNICODE
+		#define COBJMACROS
+		#include <windows.h>//must include before gl.h
+	#endif
+	#include <GL/gl.h>
+	#include <GL/glu.h>
+#endif
+
 #define TINY3D_SAMPLE_RATE 44100
 #define TINY3D_AUDIO_BUFSZ 8192
 
@@ -35,6 +51,9 @@ typedef struct {
 	color_t *pixels;
 	float *depth;
 } framebuffer_t;
+
+//globals, use but don't modify:
+extern int window_width, window_height; //updated automatically whenever the window size is changed
 
 //define these:
 extern void update(double time, double deltaTime, int nAudioFrames, int16_t *audioSamples);
@@ -86,6 +105,10 @@ void t3d_translate(float x, float y, float z);
 void t3d_rotate(float x, float y, float z, float angle);
 void t3d_position(float x, float y, float z);
 void t3d_texcoord(float u, float v);
+
+//software rendering assistance:
+//draws a framebuffer with integer scaling as high as will fit, centered in the window
+void draw_framebuffer(image_t *framebuffer);
 
 #define COUNT(arr) (sizeof(arr)/sizeof(*arr))
 #define LERP(a,b,t) ((a) + (t)*((b)-(a)))

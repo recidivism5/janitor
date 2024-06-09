@@ -1,5 +1,7 @@
 #include <tiny3d.h>
 
+int window_width, window_height;
+
 char *assertPath;
 
 void fatal_error(char *format, ...){
@@ -165,12 +167,14 @@ typedef struct _tagTT_NAME_RECORD{
     uint16_t uStringOffset; //from start of storage area
 }TT_NAME_RECORD;
 
-#define MAKEWORD(a, b)      ((uint16_t)(((uint8_t)(((uintptr_t)(a)) & 0xff)) | ((uint16_t)((uint8_t)(((uintptr_t)(b)) & 0xff))) << 8))
-#define MAKELONG(a, b)      ((uint32_t)(((uint16_t)(((uintptr_t)(a)) & 0xffff)) | ((uint32_t)((uint16_t)(((uintptr_t)(b)) & 0xffff))) << 16))
-#define LOWORD(l)           ((uint16_t)(((uintptr_t)(l)) & 0xffff))
-#define HIWORD(l)           ((uint16_t)((((uintptr_t)(l)) >> 16) & 0xffff))
-#define LOBYTE(w)           ((uint8_t)(((uintptr_t)(w)) & 0xff))
-#define HIBYTE(w)           ((uint8_t)((((uintptr_t)(w)) >> 8) & 0xff))
+#ifndef _WIN32
+	#define MAKEWORD(a, b)      ((uint16_t)(((uint8_t)(((uintptr_t)(a)) & 0xff)) | ((uint16_t)((uint8_t)(((uintptr_t)(b)) & 0xff))) << 8))
+	#define MAKELONG(a, b)      ((uint32_t)(((uint16_t)(((uintptr_t)(a)) & 0xffff)) | ((uint32_t)((uint16_t)(((uintptr_t)(b)) & 0xffff))) << 16))
+	#define LOWORD(l)           ((uint16_t)(((uintptr_t)(l)) & 0xffff))
+	#define HIWORD(l)           ((uint16_t)((((uintptr_t)(l)) >> 16) & 0xffff))
+	#define LOBYTE(w)           ((uint8_t)(((uintptr_t)(w)) & 0xff))
+	#define HIBYTE(w)           ((uint8_t)((((uintptr_t)(w)) >> 8) & 0xff))
+#endif
 #define SWAPSHORT(x) MAKEWORD(HIBYTE(x), LOBYTE(x))
 #define SWAPLONG(x) MAKELONG(SWAPSHORT(HIWORD(x)), SWAPSHORT(LOWORD(x)))
 #define ENSURE_SHORT(x) (is_little_endian() ? SWAPSHORT(x) : x)
@@ -482,4 +486,36 @@ void t3d_texcoord(float u, float v){
 	uvs[uv_count][1] = v;
 	uv_count++;
 	try_draw_triangle();
+}
+
+// software rendering assistance:
+void draw_framebuffer(image_t *framebuffer){
+    glViewport(0,0,window_width,window_height);
+    glClearColor(0.0f,0.0f,1.0f,1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    static GLuint texture = 0;
+    if (!texture){
+        glGenTextures(1,&texture);
+        glBindTexture(GL_TEXTURE_2D,texture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    }
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, framebuffer->width, framebuffer->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, framebuffer->pixels);
+    int scale = 1;
+    while (framebuffer->width*scale <= window_width && framebuffer->height*scale <= window_height){
+        scale++;
+    }
+    scale--;
+    int scaledWidth = scale * framebuffer->width;
+    int scaledHeight = scale * framebuffer->height;
+    int x = window_width/2-scaledWidth/2;
+    int y = window_height/2-scaledHeight/2;
+    glViewport(x,y,scaledWidth,scaledHeight);
+    glEnable(GL_TEXTURE_2D);
+    glBegin(GL_QUADS);
+    glTexCoord2f(0,0); glVertex2f(-1,-1);
+    glTexCoord2f(1,0); glVertex2f(1,-1);
+    glTexCoord2f(1,1); glVertex2f(1,1);
+    glTexCoord2f(0,1); glVertex2f(-1,1);
+    glEnd();
 }

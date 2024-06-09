@@ -43,8 +43,8 @@ void tick(){
 
 void update(double time, double deltaTime, int nAudioFrames, int16_t *audioSamples){
 	accumulated_time += deltaTime;
-	while (accumulated_time >= 1.0/20.0){
-		accumulated_time -= 1.0/20.0;
+	while (accumulated_time >= SEC_PER_TICK){
+		accumulated_time -= SEC_PER_TICK;
 		tick();
 	}
 	interpolant = accumulated_time / SEC_PER_TICK;
@@ -61,6 +61,12 @@ void update(double time, double deltaTime, int nAudioFrames, int16_t *audioSampl
 	t3d_position(1,1,0); t3d_texcoord(1,1);
 	t3d_position(0,1,0); t3d_texcoord(0,1);
 	t3d_position(0,0,0); t3d_texcoord(0,0);
+
+	text_set_target_image(screen.pixels,screen.width,screen.height);
+	text_set_color(1,1,1);
+	text_draw(0,screen.width,0,screen.height,"jojfoil hat\nswagcoin");
+
+	draw_framebuffer((image_t *)&screen);
 }
 
 int main(int argc, char **argv){
