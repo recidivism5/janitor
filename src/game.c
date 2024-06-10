@@ -62,9 +62,9 @@ void update(double time, double deltaTime, int nAudioFrames, int16_t *audioSampl
 	t3d_position(0,1,0); t3d_texcoord(0,1);
 	t3d_position(0,0,0); t3d_texcoord(0,0);
 
-	text_set_target_image(screen.pixels,screen.width,screen.height);
-	text_set_color(1,1,1);
-	text_draw(0,screen.width,0,screen.height,"jojfoil hat\nswagcoin");
+	//text_set_target_image(screen.pixels,screen.width,screen.height);
+	//text_set_color(1,1,1);
+	//text_draw(0,screen.width,0,screen.height,"jojfoil hat\nswagcoin");
 
 	draw_framebuffer((image_t *)&screen);
 }
@@ -73,5 +73,5 @@ int main(int argc, char **argv){
 	t3d_set_framebuffer(&screen);
 	sponge.pixels = load_image(true,&sponge.width,&sponge.height,"blocks.png");
 	t3d_set_texture(&sponge);
-    open_window((image_t *)&screen,3);
+    open_window(640,480);
 }

@@ -3,6 +3,7 @@
         "tiny3d.h": "c",
         "d3d11.h": "c",
         "common.h": "c",
-        "gl.h": "c"
+        "gl.h": "c",
+        "avcodec.h": "c"
     }
 }

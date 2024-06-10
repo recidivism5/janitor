@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(janitor)
+project(janitor C)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_subdirectory(third_party/tiny3d)

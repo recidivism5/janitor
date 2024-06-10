@@ -339,19 +339,168 @@ uint64_t get_time(void){
 
 bool is_mouse_locked(void){}
 void lock_mouse(bool locked){}
-uint32_t *load_image(bool flip_vertically, int *width, int *height, char *format, ...){}
+
+#include <libavformat/avformat.h>
+#include <libavcodec/avcodec.h>
+#include <libswscale/swscale.h>
+
+uint32_t *load_image(bool flip_vertically, int *width, int *height, char *format, ...) {
+    va_list args;
+    va_start(args,format);
+    assertPath = local_path_to_absolute_vararg(format,args);
+    va_end(args);
+
+    AVFormatContext *format_ctx = NULL;
+    AVCodecContext *codec_ctx = NULL;
+    AVCodec *codec = NULL;
+    AVFrame *frame = NULL;
+    AVPacket packet;
+    int ret;
+
+    // Open input file and initialize format context
+    if ((ret = avformat_open_input(&format_ctx, assertPath, NULL, NULL)) < 0) {
+        fprintf(stderr, "Error opening input file: %s\n", av_err2str(ret));
+        return NULL;
+    }
+
+    // Find stream info
+    if ((ret = avformat_find_stream_info(format_ctx, NULL)) < 0) {
+        fprintf(stderr, "Error finding stream info: %s\n", av_err2str(ret));
+        avformat_close_input(&format_ctx);
+        return NULL;
+    }
+
+    // Find the first video stream
+    int video_stream_index = av_find_best_stream(format_ctx, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
+    if (video_stream_index < 0) {
+        fprintf(stderr, "Could not find video stream in input file\n");
+        avformat_close_input(&format_ctx);
+        return NULL;
+    }
+
+    // Find and initialize the codec context
+    codec_ctx = avcodec_alloc_context3(NULL);
+    if (!codec_ctx) {
+        fprintf(stderr, "Failed to allocate codec context\n");
+        avformat_close_input(&format_ctx);
+        return NULL;
+    }
+    avcodec_parameters_to_context(codec_ctx, format_ctx->streams[video_stream_index]->codecpar);
+    codec = avcodec_find_decoder(codec_ctx->codec_id);
+    if (!codec) {
+        fprintf(stderr, "Unsupported codec!\n");
+        avcodec_free_context(&codec_ctx);
+        avformat_close_input(&format_ctx);
+        return NULL;
+    }
+    if ((ret = avcodec_open2(codec_ctx, codec, NULL)) < 0) {
+        fprintf(stderr, "Error opening codec: %s\n", av_err2str(ret));
+        avcodec_free_context(&codec_ctx);
+        avformat_close_input(&format_ctx);
+        return NULL;
+    }
+
+    // Allocate video frame
+    frame = av_frame_alloc();
+    if (!frame) {
+        fprintf(stderr, "Could not allocate video frame\n");
+        avcodec_free_context(&codec_ctx);
+        avformat_close_input(&format_ctx);
+        return NULL;
+    }
+
+    // Initialize packet
+    av_init_packet(&packet);
+    packet.data = NULL;
+    packet.size = 0;
+
+    // Read frames
+    if (av_read_frame(format_ctx, &packet) < 0) {
+        fprintf(stderr, "Error reading frame\n");
+        av_frame_free(&frame);
+        avcodec_free_context(&codec_ctx);
+        avformat_close_input(&format_ctx);
+        return NULL;
+    }
+
+    ret = avcodec_send_packet(codec_ctx, &packet);
+    if (ret < 0) {
+        fprintf(stderr, "Error sending packet to decoder: %s\n", av_err2str(ret));
+        av_frame_free(&frame);
+        avcodec_free_context(&codec_ctx);
+        avformat_close_input(&format_ctx);
+        return NULL;
+    }
+
+    ret = avcodec_receive_frame(codec_ctx, frame);
+    if (ret < 0) {
+        fprintf(stderr, "Error receiving frame from decoder: %s\n", av_err2str(ret));
+        av_frame_free(&frame);
+        avcodec_free_context(&codec_ctx);
+        avformat_close_input(&format_ctx);
+        return NULL;
+    }
+
+    // Allocate RGBA buffer
+    uint32_t *rgba_buffer = (uint32_t *)malloc(frame->width * frame->height * sizeof(uint32_t));
+    if (!rgba_buffer) {
+        fprintf(stderr, "Failed to allocate RGBA buffer\n");
+        av_frame_free(&frame);
+        avcodec_free_context(&codec_ctx);
+        avformat_close_input(&format_ctx);
+        return NULL;
+    }
+
+    // Convert frame to RGBA
+    struct SwsContext *sws_ctx = sws_getContext(
+        frame->width, frame->height, codec_ctx->pix_fmt,
+        frame->width, frame->height, AV_PIX_FMT_RGBA,
+        SWS_BILINEAR, NULL, NULL, NULL);
+
+    if (!sws_ctx) {
+        fprintf(stderr, "Failed to initialize swscale context\n");
+        free(rgba_buffer);
+        av_frame_free(&frame);
+        avcodec_free_context(&codec_ctx);
+        avformat_close_input(&format_ctx);
+        return NULL;
+    }
+
+    uint8_t *rgba_data[1] = { (uint8_t *)rgba_buffer };
+    int rgba_linesize[1] = { frame->width * sizeof(uint32_t) };
+    if (flip_vertically){
+        frame->data[0] += frame->linesize[0]*(frame->height-1);
+        frame->linesize[0] = -frame->linesize[0];
+    }
+    sws_scale(sws_ctx, frame->data, frame->linesize, 0, frame->height, rgba_data, rgba_linesize);
+
+    *width = frame->width;
+    *height = frame->height;
+
+    // Clean up
+    sws_freeContext(sws_ctx);
+    av_frame_free(&frame);
+    avcodec_free_context(&codec_ctx);
+    avformat_close_input(&format_ctx);
+
+    return rgba_buffer;
+}
 int16_t *load_audio(int *nFrames, char *format, ...){}
 
 #include <pulse/error.h>
 #include <pulse/simple.h>
 
-#if USE_GL
+void toggle_fullscreen(){
+
+}
+
+void text_set_target_image(uint32_t *pixels, int width, int height){}
+void text_set_font(char *ttfPathFormat, ...){}
+void text_set_font_height(int height){}
+void text_set_color(float r, float g, float b){}
+void text_draw(int left, int right, int bottom, int top, char *str){}
+
 void open_window(int width, int height){
-#else
-void open_window(int scale){
-	int width = SCREEN_WIDTH * scale;
-	int height = SCREEN_HEIGHT * scale;
-#endif
     Display *display = XOpenDisplay(NULL);
     int scr = DefaultScreen(display);
     int swidth = XDisplayWidth(display,scr);
@@ -375,12 +524,6 @@ void open_window(int scale){
 
     XMapWindow(display, window);
     XMoveWindow(display, window, swidth/2-width/2, sheight/2-height/2);
-
-    GLuint texture;
-    glGenTextures(1,&texture);
-    glBindTexture(GL_TEXTURE_2D,texture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     static int16_t audioBuf[TINY3D_AUDIO_BUFSZ*2];
     pa_sample_spec spec = {
@@ -418,8 +561,8 @@ void open_window(int scale){
 
         XWindowAttributes attribs;
         XGetWindowAttributes(display, window, &attribs);
-        width = attribs.width;
-        height = attribs.height;
+        window_width = attribs.width;
+        window_height = attribs.height;
 
         static uint64_t tstart, t0, t1;
         static int timeSet = 0;
@@ -433,44 +576,7 @@ void open_window(int scale){
 
         double dt = (double)(t1-t0) / 1000000000.0;
         int nFrames = MIN(TINY3D_AUDIO_BUFSZ,(int)(dt * TINY3D_SAMPLE_RATE));
-        //printf("nFrames: %d\n",nFrames);
-        #if USE_GL
-            update((double)(t1-tstart) / 1000000000.0, dt, width, height, nFrames, audioBuf);
-        #else
-            update((double)(t1-tstart) / 1000000000.0, dt, nFrames, audioBuf);
-
-            glViewport(0,0,width,height);
-
-            glClearColor(0.0f,0.0f,1.0f,1.0f);
-            glClear(GL_COLOR_BUFFER_BIT);
-
-            static GLuint texture = 0;
-            if (!texture){
-                glGenTextures(1,&texture);
-                glBindTexture(GL_TEXTURE_2D,texture);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-            }
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_BGRA, GL_UNSIGNED_BYTE, screen);
-            int scale = 1;
-            while (SCREEN_WIDTH*scale <= width && SCREEN_HEIGHT*scale <= height){
-                scale++;
-            }
-            scale--;
-            int scaledWidth = scale * SCREEN_WIDTH;
-            int scaledHeight = scale * SCREEN_HEIGHT;
-            int x = width/2-scaledWidth/2;
-            int y = height/2-scaledHeight/2;
-            glViewport(x,y,scaledWidth,scaledHeight);
-            glEnable(GL_TEXTURE_2D);
-            glBegin(GL_QUADS);
-            glTexCoord2f(0,0); glVertex2f(-1,-1);
-            glTexCoord2f(1,0); glVertex2f(1,-1);
-            glTexCoord2f(1,1); glVertex2f(1,1);
-            glTexCoord2f(0,1); glVertex2f(-1,1);
-            glEnd();
-        #endif
-
+        update((double)(t1-tstart) / 1000000000.0, dt, nFrames, audioBuf);
         if (nFrames){
             pa_simple_write(stream, audioBuf, nFrames*2*sizeof(*audioBuf), NULL);
         }

@@ -193,7 +193,7 @@ void get_font_name(char *path, char *out, int outCount){
 	TT_TABLE_DIRECTORY tblDir;
 	for (int i = 0; i < ttOffsetTable.uNumOfTables; i++){
 		ASSERT(1 == fread(&tblDir,sizeof(tblDir),1,f));
-		if (!_strnicmp(tblDir.szTag,"name",4)){
+		if (!memcmp(tblDir.szTag,"name",4)){
 			goto L1;
 		}
 	}

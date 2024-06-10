@@ -3,3 +3,8 @@ tinycraft.app
 app.icns
 *.exe
 *.pdb
+*.cmake
+CMakeCache.txt
+compile_commands.json
+Makefile
+CMakeFiles
