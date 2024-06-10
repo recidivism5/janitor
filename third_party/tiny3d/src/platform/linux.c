@@ -343,6 +343,7 @@ void lock_mouse(bool locked){}
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 #include <libswscale/swscale.h>
+#include <libavutil/opt.h>
 
 uint32_t *load_image(bool flip_vertically, int *width, int *height, char *format, ...) {
     va_list args;
@@ -485,7 +486,170 @@ uint32_t *load_image(bool flip_vertically, int *width, int *height, char *format
 
     return rgba_buffer;
 }
-int16_t *load_audio(int *nFrames, char *format, ...){}
+#include <libswresample/swresample.h>
+#define INITIAL_BUFFER_SIZE 4096 // Initial buffer size, can be adjusted
+#define TARGET_SAMPLE_FORMAT AV_SAMPLE_FMT_S16
+int16_t *load_audio(int *nFrames, char *format, ...){
+    va_list args;
+    va_start(args,format);
+    assertPath = local_path_to_absolute_vararg(format,args);
+    va_end(args);
+
+    AVFormatContext *format_ctx = NULL;
+    AVCodecContext *codec_ctx = NULL;
+    AVCodec *codec = NULL;
+    AVPacket packet;
+    AVFrame *frame = NULL;
+    SwrContext *swr_ctx = NULL;
+    int16_t *audio_data = NULL;
+    int ret, frame_size, channels;
+    int16_t *output_ptr;
+    int buffer_size = INITIAL_BUFFER_SIZE;
+    
+    // Open the audio file
+    if ((ret = avformat_open_input(&format_ctx, assertPath, NULL, NULL)) < 0) {
+        fprintf(stderr, "Error opening input file: %s\n", av_err2str(ret));
+        return NULL;
+    }
+    
+    // Find stream info
+    if ((ret = avformat_find_stream_info(format_ctx, NULL)) < 0) {
+        fprintf(stderr, "Error finding stream info: %s\n", av_err2str(ret));
+        avformat_close_input(&format_ctx);
+        return NULL;
+    }
+    
+    // Find the audio stream
+    int audio_stream_index = av_find_best_stream(format_ctx, AVMEDIA_TYPE_AUDIO, -1, -1, &codec, 0);
+    if (audio_stream_index < 0) {
+        fprintf(stderr, "No audio stream found in the input file\n");
+        avformat_close_input(&format_ctx);
+        return NULL;
+    }
+    
+    codec_ctx = avcodec_alloc_context3(codec);
+    if (!codec_ctx) {
+        fprintf(stderr, "Failed to allocate codec context\n");
+        avformat_close_input(&format_ctx);
+        return NULL;
+    }
+    
+    avcodec_parameters_to_context(codec_ctx, format_ctx->streams[audio_stream_index]->codecpar);
+    
+    // Open codec
+    if ((ret = avcodec_open2(codec_ctx, codec, NULL)) < 0) {
+        fprintf(stderr, "Failed to open codec: %s\n", av_err2str(ret));
+        avcodec_free_context(&codec_ctx);
+        avformat_close_input(&format_ctx);
+        return NULL;
+    }
+    
+    // Allocate frame
+    frame = av_frame_alloc();
+    if (!frame) {
+        fprintf(stderr, "Failed to allocate frame\n");
+        avcodec_free_context(&codec_ctx);
+        avformat_close_input(&format_ctx);
+        return NULL;
+    }
+    
+    // Allocate resampler context
+    swr_ctx = swr_alloc();
+    if (!swr_ctx) {
+        fprintf(stderr, "Failed to allocate resampler context\n");
+        av_frame_free(&frame);
+        avcodec_free_context(&codec_ctx);
+        avformat_close_input(&format_ctx);
+        return NULL;
+    }
+    
+    // Set resampler parameters
+    av_opt_set_int(swr_ctx, "in_channel_layout", codec_ctx->channel_layout, 0);
+    av_opt_set_int(swr_ctx, "in_sample_rate", codec_ctx->sample_rate, 0);
+    av_opt_set_sample_fmt(swr_ctx, "in_sample_fmt", codec_ctx->sample_fmt, 0);
+    av_opt_set_int(swr_ctx, "out_channel_layout", AV_CH_LAYOUT_STEREO, 0);
+    av_opt_set_int(swr_ctx, "out_sample_rate", TINY3D_SAMPLE_RATE, 0);
+    av_opt_set_sample_fmt(swr_ctx, "out_sample_fmt", TARGET_SAMPLE_FORMAT, 0);
+    
+    // Initialize resampler context
+    if ((ret = swr_init(swr_ctx)) < 0) {
+        fprintf(stderr, "Failed to initialize resampler context: %s\n", av_err2str(ret));
+        swr_free(&swr_ctx);
+        av_frame_free(&frame);
+        avcodec_free_context(&codec_ctx);
+        avformat_close_input(&format_ctx);
+        return NULL;
+    }
+    
+    // Determine audio parameters after resampling
+    channels = av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO);
+    frame_size = av_rescale_rnd(codec_ctx->frame_size, TINY3D_SAMPLE_RATE, codec_ctx->sample_rate, AV_ROUND_UP);
+    
+    // Allocate memory for decoded audio
+    audio_data = (int16_t *)malloc(buffer_size * channels * sizeof(int16_t));
+    if (!audio_data) {
+        fprintf(stderr, "Failed to allocate memory for audio data\n");
+        swr_free(&swr_ctx);
+        av_frame_free(&frame);
+        avcodec_free_context(&codec_ctx);
+        avformat_close_input(&format_ctx);
+        return NULL;
+    }
+    
+    // Decode and resample audio
+    while (av_read_frame(format_ctx, &packet) >= 0) {
+        if (packet.stream_index == audio_stream_index) {
+            ret = avcodec_send_packet(codec_ctx, &packet);
+            if (ret < 0) {
+                fprintf(stderr, "Error sending a packet for decoding: %s\n", av_err2str(ret));
+                break;
+            }
+            
+            while (ret >= 0) {
+                ret = avcodec_receive_frame(codec_ctx, frame);
+                if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
+                    break;
+                else if (ret < 0) {
+                    fprintf(stderr, "Error during decoding: %s\n", av_err2str(ret));
+                    break;
+                }
+                
+                // Resize buffer if needed
+                if ((*nFrames + frame_size) * channels > buffer_size) {
+                    buffer_size *= 2;
+                    audio_data = (int16_t *)realloc(audio_data, buffer_size * channels * sizeof(int16_t));
+                    if (!audio_data) {
+                        fprintf(stderr, "Failed to reallocate memory for audio data\n");
+                        swr_free(&swr_ctx);
+                        av_frame_free(&frame);
+                        avcodec_free_context(&codec_ctx);
+                        avformat_close_input(&format_ctx);
+                        return NULL;
+                    }
+                }
+                
+                // Resample audio
+                output_ptr = audio_data + (*nFrames * channels);
+                ret = swr_convert(swr_ctx, (uint8_t **)&output_ptr, frame_size, (const uint8_t **)frame->data, frame->nb_samples);
+                if (ret < 0) {
+                    fprintf(stderr, "Error during resampling: %s\n", av_err2str(ret));
+                    break;
+                }
+                
+                *nFrames += frame_size;
+            }
+        }
+        av_packet_unref(&packet);
+    }
+    
+    // Clean up
+    swr_free(&swr_ctx);
+    av_frame_free(&frame);
+    avcodec_free_context(&codec_ctx);
+    avformat_close_input(&format_ctx);
+    
+    return audio_data;
+}
 
 #include <pulse/error.h>
 #include <pulse/simple.h>

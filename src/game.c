@@ -41,6 +41,10 @@ void tick(){
 	
 }
 
+int16_t *doodoo;
+int doodooFrames;
+int curFrame = 0;
+
 void update(double time, double deltaTime, int nAudioFrames, int16_t *audioSamples){
 	accumulated_time += deltaTime;
 	while (accumulated_time >= SEC_PER_TICK){
@@ -48,6 +52,15 @@ void update(double time, double deltaTime, int nAudioFrames, int16_t *audioSampl
 		tick();
 	}
 	interpolant = accumulated_time / SEC_PER_TICK;
+
+	for (int i = 0; i < nAudioFrames; i++){
+		if (curFrame >= doodooFrames){
+			curFrame = 0;
+		}
+		audioSamples[i*2] = doodoo[curFrame*2];
+		audioSamples[i*2+1] = doodoo[curFrame*2+1];
+		curFrame++;
+	}
 
 	t3d_clear((color_t){255,0,0,255});
 	t3d_perspective(0.5f*M_PI,(float)screen.width/screen.height,0.01f,100.0f);
@@ -71,7 +84,8 @@ void update(double time, double deltaTime, int nAudioFrames, int16_t *audioSampl
 
 int main(int argc, char **argv){
 	t3d_set_framebuffer(&screen);
-	sponge.pixels = load_image(true,&sponge.width,&sponge.height,"blocks.png");
+	sponge.pixels = load_image(true,&sponge.width,&sponge.height,"screenshot.png");
 	t3d_set_texture(&sponge);
+	doodoo = load_audio(&doodooFrames,"Deuces.mp3");
     open_window(640,480);
 }
