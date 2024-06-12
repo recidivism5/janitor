@@ -34,8 +34,8 @@
 #define TINY3D_SAMPLE_RATE 44100
 #define TINY3D_AUDIO_BUFSZ 8192
 
-#define KEY_MOUSE_LEFT 128
-#define KEY_MOUSE_RIGHT 129
+#define KEY_MOUSE_LEFT -1
+#define KEY_MOUSE_RIGHT -2
 
 typedef struct {
 	uint8_t r,g,b,a;

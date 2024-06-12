@@ -588,8 +588,6 @@ float get_dpi_scale(){
     return 1.0f;
 }
 
-static image_t *framebuffer;
-
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam){
     switch(msg){
         case WM_CREATE:{
@@ -758,23 +756,22 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam){
     return DefWindowProcW(hwnd, msg, wparam, lparam);
 }
 
-void open_window(image_t *image, int scale){
+void open_window(int width, int height){
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     WNDCLASSEXW wcex = {
         .cbSize = sizeof(wcex),
         .style = CS_HREDRAW | CS_VREDRAW,
         .lpfnWndProc = WndProc,
         .hInstance = GetModuleHandleW(0),
-        //.hIcon = LoadIconW(GetModuleHandleW(0),MAKEINTRESOURCEW(RID_ICON)),
+        .hIcon = LoadIconW(GetModuleHandleW(0),MAKEINTRESOURCEW(69)),
         .hCursor = LoadCursorW(0,IDC_ARROW),
         .lpszClassName = L"tiny3d",
         .hIconSm = 0,
     };
     ASSERT(RegisterClassExW(&wcex));
 
-    framebuffer = image;
-    ASSERT(framebuffer->width > 0 && framebuffer->height > 0);
-    RECT initialRect = {0, 0, framebuffer->width*scale, framebuffer->height*scale};
+    ASSERT(width > 0 && height > 0);
+    RECT initialRect = {0, 0, width, height};
     AdjustWindowRect(&initialRect,WS_OVERLAPPEDWINDOW,FALSE);
     LONG initialWidth = initialRect.right - initialRect.left;
     LONG initialHeight = initialRect.bottom - initialRect.top;

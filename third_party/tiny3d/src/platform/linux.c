@@ -664,14 +664,25 @@ void text_set_font_height(int height){}
 void text_set_color(float r, float g, float b){}
 void text_draw(int left, int right, int bottom, int top, char *str){}
 
+#include <X11/XKBlib.h>
+
+static XkbDescPtr kbdesc;
+
 void open_window(int width, int height){
     Display *display = XOpenDisplay(NULL);
+
+    kbdesc = XkbGetMap(display, 0, XkbUseCoreKbd);
+    XkbGetNames(display, XkbKeyNamesMask | XkbKeyAliasesMask, kbdesc);
+    for (int scancode = kbdesc->min_key_code; scancode < kbdesc->max_key_code; scancode++){
+        printf("%d: %.*s\n",scancode,XkbKeyNameLength,kbdesc->names->keys[scancode].name);
+    }
+
     int scr = DefaultScreen(display);
     int swidth = XDisplayWidth(display,scr);
     int sheight = XDisplayHeight(display,scr);
     Window window = XCreateSimpleWindow(display, RootWindow(display, scr), 0, 0, width, height, 0, 0, 0);
     XStoreName(display, window, "tiny3d");
-    XSelectInput(display, window, KeyPressMask | KeyReleaseMask);
+    XSelectInput(display, window, KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask);
     int visual_hints[] = {
         GLX_RGBA,
         GLX_DEPTH_SIZE, 24,
@@ -714,13 +725,21 @@ void open_window(int width, int height){
         while(XPending(display))
         {
             XNextEvent(display, &event);
+            switch (event.type){
+                case KeyPress: keydown(event.xkey.keycode-kbdesc->min_key_code); break;
+                case KeyRelease: keyup(event.xkey.keycode-kbdesc->min_key_code); break;
+                case ButtonPress: switch (event.xbutton.button){
+                    case 1: keydown(KEY_MOUSE_LEFT); break;
+                    case 3: keydown(KEY_MOUSE_RIGHT); break;
+                } break;
+            }/*
             if(event.type == KeyPress)
             {
                 switch(XKeycodeToKeysym(display, event.xkey.keycode, 0))
                 {
                     case XK_Escape: return;
                 }
-            }
+            }*/
         }
 
         XWindowAttributes attribs;

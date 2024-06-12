@@ -10,6 +10,23 @@ file(GLOB SRC CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c" "${CMAKE_C
 add_executable(${PROJECT_NAME} ${SRC})
 target_link_libraries(${PROJECT_NAME} tiny3d)
 
+add_custom_command(
+  OUTPUT "icon.ico"
+  COMMAND iconwriter app.iconset
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  COMMENT "Generating icon from app.iconset"
+  VERBATIM
+)
+add_custom_target(generate_icon ALL
+  DEPENDS "icon.ico"
+)
+add_dependencies(${PROJECT_NAME} generate_icon)
+set(COMPANY_NAME "Dark Software")
+configure_file(res.rc ${CMAKE_SOURCE_DIR}/reso.rc @ONLY)
+if(WIN32)
+  target_sources(${PROJECT_NAME} PRIVATE reso.rc)
+endif()
+
 if(MSVC)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 	set_target_properties(

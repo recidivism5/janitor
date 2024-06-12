@@ -8,7 +8,7 @@ double interpolant;
 float mouse_sensitivity = 0.1f;
 
 #define SCREEN_WIDTH 256
-#define SCREEN_HEIGHT 256
+#define SCREEN_HEIGHT 192
 color_t screen_pixels[SCREEN_WIDTH*SCREEN_HEIGHT];
 float screen_depth[SCREEN_WIDTH*SCREEN_HEIGHT];
 framebuffer_t screen = {
@@ -22,7 +22,8 @@ image_t sponge;
 
 void keydown(int scancode){
 	switch (scancode){
-		case 27: exit(0); break;
+		case KEY_MOUSE_LEFT: printf("click\n"); break;
+		case 1: exit(0); break;
 		case 'P': toggle_fullscreen(); break;
 		case 'C': lock_mouse(!is_mouse_locked()); break;
 	}
@@ -66,7 +67,9 @@ void update(double time, double deltaTime, int nAudioFrames, int16_t *audioSampl
 	t3d_perspective(0.5f*M_PI,(float)screen.width/screen.height,0.01f,100.0f);
 	t3d_load_identity();
 	t3d_translate(0,0,-1.25);
-	t3d_rotate(0,1,0,0.5f*M_PI*sin(time));
+	static double r = 0.0;
+	r += deltaTime; if (r > 2.0*M_PI) r -= 2.0*M_PI;
+	t3d_rotate(0,1,0,0.5f*M_PI*sin(r));
 	t3d_translate(-0.5f,-0.5f,0.0f);
 	t3d_position(0,0,0); t3d_texcoord(0,0);
 	t3d_position(1,0,0); t3d_texcoord(1,0);

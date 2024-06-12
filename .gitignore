@@ -1,7 +1,9 @@
 build
 tinycraft.app
 app.icns
-*.exe
+janitor
+janitor.exe
+janitor.pdb
 *.pdb
 *.cmake
 CMakeCache.txt
@@ -9,3 +11,4 @@ compile_commands.json
 Makefile
 CMakeFiles
 janitor
+*.mp3
