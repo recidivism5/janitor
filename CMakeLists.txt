@@ -64,7 +64,7 @@ if(APPLE)
 		POST_BUILD
 		COMMAND plutil -replace NSHighResolutionCapable -bool true "${CMAKE_CURRENT_SOURCE_DIR}/${PROJECT_NAME}.app/Contents/Info.plist"
     )
-	file(COPY res DESTINATION ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}.app/Contents/MacOS/res)
+	file(COPY res DESTINATION ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}.app/Contents/MacOS)
 endif()
 
 #https://stackoverflow.com/questions/7747857/in-cmake-how-do-i-work-around-the-debug-and-release-directories-visual-studio-2
