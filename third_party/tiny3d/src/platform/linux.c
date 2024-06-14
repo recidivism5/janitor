@@ -654,10 +654,6 @@ int16_t *load_audio(int *nFrames, char *format, ...){
 #include <pulse/error.h>
 #include <pulse/simple.h>
 
-void toggle_fullscreen(){
-
-}
-
 void text_set_target_image(uint32_t *pixels, int width, int height){}
 void text_set_font(char *ttfPathFormat, ...){}
 void text_set_font_height(int height){}
@@ -667,9 +663,37 @@ void text_draw(int left, int right, int bottom, int top, char *str){}
 #include <X11/XKBlib.h>
 
 static XkbDescPtr kbdesc;
+static Display *display;
+static Window window;
+static GLXContext context;
+
+void toggle_fullscreen(){
+    XSizeHints* size_hints;
+    long hints = 0;
+    size_hints = XAllocSizeHints();
+    if (XGetWMSizeHints(display, window, size_hints, &hints,
+        XInternAtom(display, "WM_SIZE_HINTS", False)) == 0) {
+        puts("Failed.");
+    }
+    XFree(size_hints);
+    glXMakeCurrent(display, None, NULL);
+    XLowerWindow(display, window);
+    XUnmapWindow(display, window);
+    XSync(display, False);
+    Atom atoms[2] = { XInternAtom(display, "_NET_WM_STATE_FULLSCREEN", False), None };
+    XChangeProperty(
+        display, 
+        window, 
+        XInternAtom(display, "_NET_WM_STATE", False),
+        XA_ATOM, 32, PropModeReplace, (unsigned char*)atoms, 1
+    );
+    XMapWindow(display, window);
+    XRaiseWindow(display, window);
+    glXMakeCurrent(display, window, context);
+}
 
 void open_window(int width, int height){
-    Display *display = XOpenDisplay(NULL);
+    display = XOpenDisplay(NULL);
 
     kbdesc = XkbGetMap(display, 0, XkbUseCoreKbd);
     XkbGetNames(display, XkbKeyNamesMask | XkbKeyAliasesMask, kbdesc);
@@ -680,7 +704,7 @@ void open_window(int width, int height){
     int scr = DefaultScreen(display);
     int swidth = XDisplayWidth(display,scr);
     int sheight = XDisplayHeight(display,scr);
-    Window window = XCreateSimpleWindow(display, RootWindow(display, scr), 0, 0, width, height, 0, 0, 0);
+    window = XCreateSimpleWindow(display, RootWindow(display, scr), 0, 0, width, height, 0, 0, 0);
     XStoreName(display, window, "tiny3d");
     XSelectInput(display, window, KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask);
     int visual_hints[] = {
@@ -690,7 +714,7 @@ void open_window(int width, int height){
         None
     };
     XVisualInfo *visual_info = glXChooseVisual(display, scr, visual_hints);
-    GLXContext context = glXCreateContext(display, visual_info, NULL, True);
+    context = glXCreateContext(display, visual_info, NULL, True);
     glXMakeCurrent(display, window, context);
     typedef void (*PFNGLXSWAPINTERVALEXTPROC)(Display *, GLXDrawable, int);
     PFNGLXSWAPINTERVALEXTPROC glXSwapIntervalEXT = (PFNGLXSWAPINTERVALEXTPROC)glXGetProcAddress("glXSwapIntervalEXT");
@@ -698,6 +722,7 @@ void open_window(int width, int height){
     glXSwapIntervalEXT(display,window,1);
 
     XMapWindow(display, window);
+    XRaiseWindow(display, window);
     XMoveWindow(display, window, swidth/2-width/2, sheight/2-height/2);
 
     static int16_t audioBuf[TINY3D_AUDIO_BUFSZ*2];

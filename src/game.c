@@ -24,7 +24,7 @@ void keydown(int scancode){
 	switch (scancode){
 		case KEY_MOUSE_LEFT: printf("click\n"); break;
 		case 1: exit(0); break;
-		case 'P': toggle_fullscreen(); break;
+		case 33: toggle_fullscreen(); break;
 		case 'C': lock_mouse(!is_mouse_locked()); break;
 	}
 }
@@ -87,8 +87,8 @@ void update(double time, double deltaTime, int nAudioFrames, int16_t *audioSampl
 
 int main(int argc, char **argv){
 	t3d_set_framebuffer(&screen);
-	sponge.pixels = load_image(true,&sponge.width,&sponge.height,"screenshot.png");
+	sponge.pixels = load_image(true,&sponge.width,&sponge.height,"res/screenshot.png");
 	t3d_set_texture(&sponge);
-	doodoo = load_audio(&doodooFrames,"Deuces.mp3");
+	doodoo = load_audio(&doodooFrames,"res/frequency.mp3");
     open_window(640,480);
 }
