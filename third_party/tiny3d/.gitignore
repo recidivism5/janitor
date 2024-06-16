@@ -1,9 +1,0 @@
-build
-*.exe
-*.pdb
-.vscode
-*.cmake
-CMakeCache.txt
-compile_commands.json
-Makefile
-CMakeFiles
