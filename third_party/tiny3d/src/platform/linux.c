@@ -667,29 +667,45 @@ static Display *display;
 static Window window;
 static GLXContext context;
 
+#define WINW 640
+#define WINH 480
+
+#define _NET_WM_STATE_REMOVE    0l
+#define _NET_WM_STATE_ADD       1l
+
 void toggle_fullscreen(){
-    XSizeHints* size_hints;
-    long hints = 0;
-    size_hints = XAllocSizeHints();
-    if (XGetWMSizeHints(display, window, size_hints, &hints,
-        XInternAtom(display, "WM_SIZE_HINTS", False)) == 0) {
-        puts("Failed.");
+    static bool fullscreen = false;
+    fullscreen = !fullscreen;
+    Atom _NET_WM_STATE = XInternAtom(display, "_NET_WM_STATE", False);
+    Atom _NET_WM_STATE_FULLSCREEN = XInternAtom(display, "_NET_WM_STATE_FULLSCREEN", False);
+    XEvent xevent;
+
+    XSizeHints *sizehints = XAllocSizeHints();
+    long flags = 0;
+    XGetWMNormalHints(display, window, sizehints, &flags);
+
+    if (fullscreen) {
+        /* we are going fullscreen so turn the flags off */
+        sizehints->flags &= ~(PMinSize | PMaxSize);
+    } else {
+        /* Reset the min/max width height to make the window non-resizable again */
+        sizehints->flags |= PMinSize | PMaxSize;
+        sizehints->min_width = sizehints->max_width = WINW;
+        sizehints->min_height = sizehints->max_height = WINH;
     }
-    XFree(size_hints);
-    glXMakeCurrent(display, None, NULL);
-    XLowerWindow(display, window);
-    XUnmapWindow(display, window);
-    XSync(display, False);
-    Atom atoms[2] = { XInternAtom(display, "_NET_WM_STATE_FULLSCREEN", False), None };
-    XChangeProperty(
-        display, 
-        window, 
-        XInternAtom(display, "_NET_WM_STATE", False),
-        XA_ATOM, 32, PropModeReplace, (unsigned char*)atoms, 1
-    );
-    XMapWindow(display, window);
-    XRaiseWindow(display, window);
-    glXMakeCurrent(display, window, context);
+    XSetWMNormalHints(display, window, sizehints);
+    XFree(sizehints);
+
+    memset(&xevent, 0, sizeof (xevent));
+    xevent.xany.type = ClientMessage;
+    xevent.xclient.message_type = _NET_WM_STATE;
+    xevent.xclient.format = 32;
+    xevent.xclient.window = window;
+    xevent.xclient.data.l[0] = fullscreen ? _NET_WM_STATE_ADD : _NET_WM_STATE_REMOVE;
+    xevent.xclient.data.l[1] = _NET_WM_STATE_FULLSCREEN;
+    xevent.xclient.data.l[3] = 0l;
+    XSendEvent(display, RootWindow(display, DefaultScreen(display)), 0, SubstructureNotifyMask | SubstructureRedirectMask, &xevent);
+    XFlush(display);
 }
 
 void open_window(int width, int height){
@@ -701,19 +717,64 @@ void open_window(int width, int height){
         printf("%d: %.*s\n",scancode,XkbKeyNameLength,kbdesc->names->keys[scancode].name);
     }
 
-    int scr = DefaultScreen(display);
-    int swidth = XDisplayWidth(display,scr);
-    int sheight = XDisplayHeight(display,scr);
-    window = XCreateSimpleWindow(display, RootWindow(display, scr), 0, 0, width, height, 0, 0, 0);
-    XStoreName(display, window, "tiny3d");
-    XSelectInput(display, window, KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask);
+    XSetWindowAttributes xattr;
+    XSizeHints *sizehints;
+    XWMHints *wmhints;
+    XClassHint *classhints;
+
+    memset(&xattr, '\0', sizeof (xattr));
+    xattr.event_mask = ExposureMask |
+                       ButtonPressMask | ButtonReleaseMask | KeyPressMask | KeyReleaseMask |
+                       StructureNotifyMask | FocusChangeMask | PointerMotionMask;
+
+    window = XCreateWindow(display, RootWindow(display, DefaultScreen(display)),
+                       0, 0, WINW, WINH,
+                       0, CopyFromParent, InputOutput, CopyFromParent,
+                       CWEventMask, &xattr );
+
+    sizehints = XAllocSizeHints();
+    sizehints->flags = 0;
+    sizehints->min_width = sizehints->max_width = WINW;
+    sizehints->min_height = sizehints->max_height = WINH;
+    sizehints->flags |= (PMaxSize | PMinSize);
+
+    sizehints->x = 0;
+    sizehints->y = 0;
+    sizehints->flags |= USPosition;
+
+    /* Setup the input hints so we get keyboard input */
+    wmhints = XAllocWMHints();
+    wmhints->input = True;
+    wmhints->window_group = (XID) getpid();
+    wmhints->flags = InputHint | WindowGroupHint;
+
+    /* Setup the class hints so we can get an icon (AfterStep) */
+    classhints = XAllocClassHint();
+    classhints->res_name = "SDL_App";
+    classhints->res_class = "SDL_App";
+
+    /* Set the size, input and class hints, and define WM_CLIENT_MACHINE and WM_LOCALE_NAME */
+    XSetWMProperties(display, window, NULL, NULL, NULL, 0, sizehints, wmhints, classhints);
+
+    XFree(sizehints);
+    XFree(wmhints);
+    XFree(classhints);
+
+    long pid = (long) getpid();
+    Atom _NET_WM_PID = XInternAtom(display, "_NET_WM_PID", False);
+    XChangeProperty(display, window, _NET_WM_PID, XA_CARDINAL, 32, PropModeReplace, (unsigned char *) &pid, 1);
+
+    Atom _NET_WM_WINDOW_TYPE = XInternAtom(display, "_NET_WM_WINDOW_TYPE", False);
+    Atom _NET_WM_WINDOW_TYPE_NORMAL = XInternAtom(display, "_NET_WM_WINDOW_TYPE_NORMAL", False);
+    XChangeProperty(display, window, _NET_WM_WINDOW_TYPE, XA_ATOM, 32, PropModeReplace, (unsigned char *)&_NET_WM_WINDOW_TYPE_NORMAL, 1);
+
     int visual_hints[] = {
         GLX_RGBA,
         GLX_DEPTH_SIZE, 24,
         GLX_DOUBLEBUFFER,
         None
     };
-    XVisualInfo *visual_info = glXChooseVisual(display, scr, visual_hints);
+    XVisualInfo *visual_info = glXChooseVisual(display, DefaultScreen(display), visual_hints);
     context = glXCreateContext(display, visual_info, NULL, True);
     glXMakeCurrent(display, window, context);
     typedef void (*PFNGLXSWAPINTERVALEXTPROC)(Display *, GLXDrawable, int);
@@ -723,7 +784,9 @@ void open_window(int width, int height){
 
     XMapWindow(display, window);
     XRaiseWindow(display, window);
-    XMoveWindow(display, window, swidth/2-width/2, sheight/2-height/2);
+    //XMoveWindow(display, window, swidth/2-width/2, sheight/2-height/2);
+    Atom wm_delete_window = XInternAtom(display, "WM_DELETE_WINDOW", False);
+    XSetWMProtocols(display, window, &wm_delete_window, 1);
 
     static int16_t audioBuf[TINY3D_AUDIO_BUFSZ*2];
     pa_sample_spec spec = {
@@ -744,13 +807,17 @@ void open_window(int width, int height){
     );
     ASSERT(stream);
     
-    for(;;)
-    {
+    while (1){
         XEvent event;
-        while(XPending(display))
-        {
+        while (XPending(display)){
             XNextEvent(display, &event);
             switch (event.type){
+                case ClientMessage:{
+                    if ((Atom)event.xclient.data.l[0] == wm_delete_window){
+                        goto EXIT;
+                    }
+                    break;
+                }
                 case KeyPress: keydown(event.xkey.keycode-kbdesc->min_key_code); break;
                 case KeyRelease: keyup(event.xkey.keycode-kbdesc->min_key_code); break;
                 case ButtonPress: switch (event.xbutton.button){
@@ -793,4 +860,7 @@ void open_window(int width, int height){
 
         glXSwapBuffers(display, window);
     }
+    EXIT:;
+    XDestroyWindow(display, window);
+    XCloseDisplay(display);
 }
